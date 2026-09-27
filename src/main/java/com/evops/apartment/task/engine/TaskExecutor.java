@@ -50,8 +50,12 @@ public class TaskExecutor {
 
     /** 认领并执行一个任务；由调度线程池调用。任何异常都不得逃出工作线程。 */
     public void claimAndRun(Long taskId) {
-        // 续传发起请求的 TraceId 到工作线程：后台全部步骤日志与提交请求同号，
-        // 工作线程来自池化复用，执行完必须清空 MDC 防串号
+        // 工作线程池化复用：认领前无条件清空 MDC，绝不带着上一任务（或调度线程经装饰器
+        // 传入）的 traceId/合同号/账号执行本任务——这是后台日志串到别人合同号的第一道闸。
+        TraceContext.clear();
+        // 续传发起请求的 TraceId 到工作线程：后台全部步骤日志与提交请求同号。
+        // 记录查不到（罕见：与清理/取消竞态）时保持空上下文执行：doRun 会重读并退出，
+        // 此时日志无合同号也比挂在上一单合同号下正确。
         AsyncTask traceSource = taskMapper.selectById(taskId);
         if (traceSource != null) {
             bindTraceContext(traceSource);
@@ -68,7 +72,7 @@ public class TaskExecutor {
     }
 
     /**
-     * 把任务的日志上下文绑定到当前工作线程：
+     * 把任务的日志上下文<b>权威</b>绑定到当前工作线程（空值即摘除，不残留旧值）：
      * traceId（apt-6 起的任务必有；旧数据缺失时用任务号兜底，后台日志仍可整体聚合）、
      * 合同号（bizRef）、发起人（operator）。
      */

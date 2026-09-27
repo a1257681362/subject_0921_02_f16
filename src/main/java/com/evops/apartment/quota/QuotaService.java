@@ -17,7 +17,6 @@ import com.evops.rbac.core.CurrentUser;
 import com.evops.rbac.core.CurrentUserHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,71 +62,72 @@ public class QuotaService {
     /** 申请预占：先占 1 个余量，20 分钟内确认才实扣。 */
     @Transactional(rollbackFor = Exception.class)
     public QuotaHold apply(QuotaApplyRequest req) {
-        String previousContract = MDC.get(TraceContext.CONTRACT_NO);
-        TraceContext.bindContract(req.getBizRef());
-        try {
-            scopeGuard.requireCommunityInScope(req.getCommunity());
-            String operator = scopeGuard.resolveOperator(req.getOperator());
-            LocalDateTime now = LocalDateTime.now();
-
-            QuotaBalance balance = balanceMapper.selectOne(new QueryWrapper<QuotaBalance>()
-                    .eq("community", req.getCommunity()));
-            if (balance == null) {
-                throw new IllegalArgumentException("小区尚未配置出租率配额: " + req.getCommunity());
-            }
-            // 友好前置校验（并发正确性仍由下面的条件更新与唯一索引兜底）
-            QuotaHold active = findActiveByBizRef(req.getBizRef());
-            if (active != null) {
-                throw new IllegalArgumentException("业务单 " + req.getBizRef()
-                        + " 已存在" + (QuotaHold.STATUS_HELD.equals(active.getStatus()) ? "预占中" : "已确认")
-                        + "的预占单 " + active.getHoldNo() + "，同单不可重复预占");
-            }
-            if (balance.available() < QuotaBalance.RESERVE_AMOUNT) {
-                throw new IllegalArgumentException("出租余量不足：配额 " + balance.getTotalAmount()
-                        + "，已实扣 " + balance.getOccupiedAmount()
-                        + "，预占中 " + balance.getReservedAmount());
-            }
-
-            // 原子预占：WHERE 余量 >= 1，并发下数据库行锁决定先后，不足者更新 0 行
-            int reserved = balanceMapper.reserve(req.getCommunity(), QuotaBalance.RESERVE_AMOUNT,
-                    req.getRequestNo(), operator, now);
-            if (reserved == 0) {
-                throw new IllegalArgumentException("出租余量不足，预占失败（可能并发申请已占满）");
-            }
-
-            QuotaHold hold = new QuotaHold();
-            hold.setHoldNo("HOLD-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8));
-            hold.setCommunity(req.getCommunity());
-            hold.setBizRef(req.getBizRef());
-            hold.setReserveAmount(QuotaBalance.RESERVE_AMOUNT);
-            hold.setStatus(QuotaHold.STATUS_HELD);
-            hold.setExpiresAt(now.plusMinutes(properties.getHoldTtlMinutes()));
-            hold.setRequestNo(req.getRequestNo());
-            hold.setOperator(operator);
-            hold.setBizTime(now);
-            hold.setDataVersion(1);
-            hold.setUpdatedAt(now);
-            try {
-                holdMapper.insert(hold);
-            } catch (DuplicateKeyException e) {
-                // 并发同单申请：唯一索引 uk_quota_hold_active_biz 兜底，本事务回滚，预占额不挂账
-                throw new IllegalArgumentException(
-                        "业务单 " + req.getBizRef() + " 已存在预占单，同单不可重复预占");
-            }
-
-            QuotaBalance after = reloadBalance(req.getCommunity());
-            writeJournal(after, QuotaJournal.TYPE_RESERVE, hold,
-                    0, 0, QuotaBalance.RESERVE_AMOUNT, req.getRequestNo(), operator, now);
-            log.info("额度预占成功 holdNo={} community={} bizRef={} 余量={} requestNo={}",
-                    hold.getHoldNo(), hold.getCommunity(), hold.getBizRef(), after.available(),
-                    req.getRequestNo());
-            scopeGuard.audit("apartment:quota:apply", req.getRequestNo(),
-                    "community=" + req.getCommunity() + ",bizRef=" + req.getBizRef(), null);
-            return hold;
-        } finally {
-            restoreContract(previousContract);
+        try (TraceContext.Scope ignored = TraceContext.contractScope(req.getBizRef())) {
+            return doApply(req);
         }
     }
+
+    private QuotaHold doApply(QuotaApplyRequest req) {
+        scopeGuard.requireCommunityInScope(req.getCommunity());
+        String operator = scopeGuard.resolveOperator(req.getOperator());
+        LocalDateTime now = LocalDateTime.now();
+
+        QuotaBalance balance = balanceMapper.selectOne(new QueryWrapper<QuotaBalance>()
+                .eq("community", req.getCommunity()));
+        if (balance == null) {
+            throw new IllegalArgumentException("小区尚未配置出租率配额: " + req.getCommunity());
+        }
+        // 友好前置校验（并发正确性仍由下面的条件更新与唯一索引兜底）
+        QuotaHold active = findActiveByBizRef(req.getBizRef());
+        if (active != null) {
+            throw new IllegalArgumentException("业务单 " + req.getBizRef()
+                    + " 已存在" + (QuotaHold.STATUS_HELD.equals(active.getStatus()) ? "预占中" : "已确认")
+                    + "的预占单 " + active.getHoldNo() + "，同单不可重复预占");
+        }
+        if (balance.available() < QuotaBalance.RESERVE_AMOUNT) {
+            throw new IllegalArgumentException("出租余量不足：配额 " + balance.getTotalAmount()
+                    + "，已实扣 " + balance.getOccupiedAmount()
+                    + "，预占中 " + balance.getReservedAmount());
+        }
+
+        // 原子预占：WHERE 余量 >= 1，并发下数据库行锁决定先后，不足者更新 0 行
+        int reserved = balanceMapper.reserve(req.getCommunity(), QuotaBalance.RESERVE_AMOUNT,
+                req.getRequestNo(), operator, now);
+        if (reserved == 0) {
+            throw new IllegalArgumentException("出租余量不足，预占失败（可能并发申请已占满）");
+        }
+
+        QuotaHold hold = new QuotaHold();
+        hold.setHoldNo("HOLD-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8));
+        hold.setCommunity(req.getCommunity());
+        hold.setBizRef(req.getBizRef());
+        hold.setReserveAmount(QuotaBalance.RESERVE_AMOUNT);
+        hold.setStatus(QuotaHold.STATUS_HELD);
+        hold.setExpiresAt(now.plusMinutes(properties.getHoldTtlMinutes()));
+        hold.setRequestNo(req.getRequestNo());
+        hold.setOperator(operator);
+        hold.setBizTime(now);
+        hold.setDataVersion(1);
+        hold.setUpdatedAt(now);
+        try {
+            holdMapper.insert(hold);
+        } catch (DuplicateKeyException e) {
+            // 并发同单申请：唯一索引 uk_quota_hold_active_biz 兜底，本事务回滚，预占额不挂账
+            throw new IllegalArgumentException(
+                    "业务单 " + req.getBizRef() + " 已存在预占单，同单不可重复预占");
+        }
+
+        QuotaBalance after = reloadBalance(req.getCommunity());
+        writeJournal(after, QuotaJournal.TYPE_RESERVE, hold,
+                0, 0, QuotaBalance.RESERVE_AMOUNT, req.getRequestNo(), operator, now);
+        log.info("额度预占成功 holdNo={} community={} bizRef={} 余量={} requestNo={}",
+                hold.getHoldNo(), hold.getCommunity(), hold.getBizRef(), after.available(),
+                req.getRequestNo());
+        scopeGuard.audit("apartment:quota:apply", req.getRequestNo(),
+                "community=" + req.getCommunity() + ",bizRef=" + req.getBizRef(), null);
+        return hold;
+    }
+
 
     /** 确认实扣：预占额转已实扣；过期/已释放/已确认均拒绝。 */
     @Transactional(rollbackFor = Exception.class)
@@ -420,13 +420,5 @@ public class QuotaService {
             throw new IllegalStateException("额度账不存在: " + community);
         }
         return after;
-    }
-
-    private static void restoreContract(String previous) {
-        if (previous == null) {
-            TraceContext.clearContract();
-        } else {
-            TraceContext.bindContract(previous);
-        }
     }
 }

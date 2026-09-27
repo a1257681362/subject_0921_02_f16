@@ -13,7 +13,6 @@ import com.evops.apartment.sensitive.SensitiveGuard;
 import com.evops.common.trace.TraceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -45,10 +44,9 @@ public class LeaseService {
 
     @Transactional(rollbackFor = Exception.class)
     public Lease create(LeaseCreateRequest req) {
-        // 合同号先入日志上下文：范围校验失败/唯一约束冲突等分支的日志也能按合同号聚合
-        String previousContract = MDC.get(TraceContext.CONTRACT_NO);
-        TraceContext.bindContract(req.getContractNo());
-        try {
+        // 合同号先入日志上下文：范围校验失败/唯一约束冲突等分支的日志也能按合同号聚合。
+        // 作用域由 TraceContext 强制收口（关闭自动还原），不靠本方法记得写 finally。
+        try (TraceContext.Scope ignored = TraceContext.contractScope(req.getContractNo())) {
             scopeGuard.requirePropertyCodeInScope(req.getPropertyCode());
             String operator = scopeGuard.resolveOperator(req.getOperator());
             SensitiveContext ctx = SensitiveContext.builder(SensitiveContext.MODULE_LEASE, operator)
@@ -81,8 +79,6 @@ public class LeaseService {
             scopeGuard.audit("apartment:lease:create", req.getRequestNo(),
                     "contractNo=" + req.getContractNo() + ",propertyCode=" + req.getPropertyCode(), null);
             return lease;
-        } finally {
-            restoreContract(previousContract);
         }
     }
 
@@ -126,13 +122,5 @@ public class LeaseService {
         }
         scopeGuard.audit(auditResource, null, params.toString(), leases.size());
         return leases;
-    }
-
-    private static void restoreContract(String previous) {
-        if (previous == null) {
-            TraceContext.clearContract();
-        } else {
-            TraceContext.bindContract(previous);
-        }
     }
 }

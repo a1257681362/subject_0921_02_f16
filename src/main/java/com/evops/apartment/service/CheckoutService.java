@@ -15,7 +15,6 @@ import com.evops.apartment.sensitive.SensitiveGuard;
 import com.evops.common.trace.TraceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,12 +54,8 @@ public class CheckoutService {
 
     @Transactional(rollbackFor = Exception.class)
     public LeaseCheckout checkout(CheckoutRequest req) {
-        String previousContract = MDC.get(TraceContext.CONTRACT_NO);
-        TraceContext.bindContract(req.getContractNo());
-        try {
+        try (TraceContext.Scope ignored = TraceContext.contractScope(req.getContractNo())) {
             return doCheckout(req);
-        } finally {
-            restoreContract(previousContract);
         }
     }
 
@@ -129,9 +124,7 @@ public class CheckoutService {
     }
 
     public Map<String, Object> detail(String contractNo) {
-        String previousContract = MDC.get(TraceContext.CONTRACT_NO);
-        TraceContext.bindContract(contractNo);
-        try {
+        try (TraceContext.Scope ignored = TraceContext.contractScope(contractNo)) {
             LeaseCheckout checkout = checkoutMapper.selectOne(new QueryWrapper<LeaseCheckout>()
                     .eq("contract_no", contractNo));
             if (checkout == null) {
@@ -150,16 +143,6 @@ public class CheckoutService {
             result.put("checkout", checkout);
             result.put("deductions", deductions);
             return result;
-        } finally {
-            restoreContract(previousContract);
-        }
-    }
-
-    private static void restoreContract(String previous) {
-        if (previous == null) {
-            TraceContext.clearContract();
-        } else {
-            TraceContext.bindContract(previous);
         }
     }
 }

@@ -72,17 +72,10 @@ public class AsyncTaskService {
      */
     @Transactional(rollbackFor = Exception.class)
     public AsyncTask submitSignArchive(SignArchiveSubmitRequest req) {
-        // 合同号入日志上下文：范围/房源/重复发起等拒绝分支的日志也能按合同号聚合
-        String previousContract = org.slf4j.MDC.get(TraceContext.CONTRACT_NO);
-        TraceContext.bindContract(req.getContractNo());
-        try {
+        // 合同号入日志上下文：范围/房源/重复发起等拒绝分支的日志也能按合同号聚合。
+        // 作用域关闭自动还原，规矩在 TraceContext 里，不依赖本方法手写 finally。
+        try (TraceContext.Scope ignored = TraceContext.contractScope(req.getContractNo())) {
             return doSubmitSignArchive(req);
-        } finally {
-            if (previousContract == null) {
-                TraceContext.clearContract();
-            } else {
-                TraceContext.bindContract(previousContract);
-            }
         }
     }
 

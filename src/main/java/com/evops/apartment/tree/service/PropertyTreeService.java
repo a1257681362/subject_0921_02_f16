@@ -14,7 +14,6 @@ import com.evops.rbac.core.CurrentUser;
 import com.evops.rbac.core.CurrentUserHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -221,20 +220,15 @@ public class PropertyTreeService {
         return visible;
     }
 
-    /** 把合同号临时绑到日志上下文执行（建档/换父/排序日志可按合同号检索），结束还原。 */
+    /**
+     * 把合同号绑到日志上下文执行（建档/换父/排序日志可按合同号检索）。
+     * 用 {@link TraceContext#contractScope} 强制收口：结束（含异常）自动还原进入前的值，
+     * 不手写暂存/恢复，池化线程上漏还原就会把别人的合同号带进后续日志。
+     */
     private void withContract(String contractNo, Runnable action) {
-        String previous = MDC.get(TraceContext.CONTRACT_NO);
-        if (StringUtils.hasText(contractNo)) {
-            TraceContext.bindContract(contractNo);
-        }
-        try {
+        try (TraceContext.Scope ignored = TraceContext.contractScope(
+                StringUtils.hasText(contractNo) ? contractNo : null)) {
             action.run();
-        } finally {
-            if (previous == null) {
-                TraceContext.clearContract();
-            } else {
-                TraceContext.bindContract(previous);
-            }
         }
     }
 }

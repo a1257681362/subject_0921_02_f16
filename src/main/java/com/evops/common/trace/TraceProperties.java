@@ -5,8 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * apt-6 全链路追踪配置。
  *
- * - enabled=false 为应急回退：入口不再承接/生成 TraceId（响应头仍原样回带在网关注入的值），
- *   日志格式与保留策略不变，排障窗口一般保持 true；
+ * - enabled=false 为应急回退：入口不承接/不生成 TraceId，也不回带响应头——
+ *   响应头必须与日志同源，关闭时日志无 traceId，回带头只会让管家凭头查空、被带偏；
  * - 响应头名固定 X-Trace-Id，前端/网关报错时凭该头即可定位整次请求日志。
  */
 @ConfigurationProperties(prefix = "evops.trace")
