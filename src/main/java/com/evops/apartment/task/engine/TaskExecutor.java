@@ -50,8 +50,11 @@ public class TaskExecutor {
 
     /** 认领并执行一个任务；由调度线程池调用。任何异常都不得逃出工作线程。 */
     public void claimAndRun(Long taskId) {
+        // 边界铁律（工作线程侧）：绑定本任务上下文前先消毒——池化线程上的任何残留
+        // （上一个任务的漏清、装饰器带入的提交线程上下文）都不得混进本任务日志；
         // 续传发起请求的 TraceId 到工作线程：后台全部步骤日志与提交请求同号，
-        // 工作线程来自池化复用，执行完必须清空 MDC 防串号
+        // 执行完 finally 再清空，线程复用不串号
+        TraceContext.clear();
         AsyncTask traceSource = taskMapper.selectById(taskId);
         if (traceSource != null) {
             bindTraceContext(traceSource);
