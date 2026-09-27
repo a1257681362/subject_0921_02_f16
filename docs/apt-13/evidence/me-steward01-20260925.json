@@ -1,0 +1,52 @@
+{
+    "success": true,
+    "message": "OK",
+    "traceId": "1a0d8cb578d39f9accbb69e",
+    "data": {
+        "username": "steward01",
+        "displayName": "\u738b\u7ba1\u5bb6",
+        "roles": [
+            "steward"
+        ],
+        "menus": [
+            "apartment:menu:dashboard",
+            "apartment:menu:property",
+            "apartment:menu:lease",
+            "apartment:menu:checkout",
+            "apartment:menu:handover",
+            "apartment:menu:sign-archive",
+            "apartment:menu:ops-log",
+            "apartment:menu:quota",
+            "apartment:menu:property-tree"
+        ],
+        "buttons": [
+            "apartment:property:view",
+            "apartment:lease:create",
+            "apartment:lease:view",
+            "apartment:lease:export",
+            "apartment:checkout:handle",
+            "apartment:checkout:view",
+            "apartment:handover:create",
+            "apartment:handover:confirm",
+            "apartment:handover:view",
+            "apartment:sign:submit",
+            "apartment:sign:view",
+            "apartment:sign:cancel",
+            "apartment:sign:retry",
+            "apartment:opslog:view",
+            "apartment:quota:apply",
+            "apartment:quota:confirm",
+            "apartment:quota:cancel",
+            "apartment:quota:view",
+            "apartment:property-tree:manage",
+            "apartment:property-tree:view"
+        ],
+        "dataScope": {
+            "level": "SELF",
+            "communities": [],
+            "grantedBy": [
+                "steward"
+            ]
+        }
+    }
+}

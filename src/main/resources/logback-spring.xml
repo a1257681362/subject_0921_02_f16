@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  apt-6 全链路日志配置（格式字段固定，不允许各环境私自改字段顺序/名称，检索口径统一）：
+
+  固定字段：时间 | 级别 | [应用,线程] | traceId | contractNo | user | logger | 消息 | 堆栈
+  - traceId：入口生成（X-Trace-Id），后台任务续传；无上下文时输出 N/A；
+  - contractNo：有合同上下文的请求/后台步骤输出合同号，便于按合同聚合一次请求的全部日志；
+  - user：登录账号（鉴权过滤器写入）。
+
+  输出：
+  - CONSOLE：容器/前台；
+  - FILE：logs/evops-base.log，按天 +100MB 切分，gz 归档，保留 14 天（日志按 14 天滚动）；
+  - OPS_DB：同步采集到 t_ops_log_entry（异步入库），管家在「公寓楼-运维日志」菜单按
+    合同号/TraceId 检索，库内同样保留 14 天，每日清理。只采 com.evops 的 INFO+ 与全局 WARN+。
+-->
+<configuration>
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="evops-base"/>
+    <property name="LOG_PATH" value="${LOG_PATH:-logs}"/>
+    <property name="FIXED_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [${appName},%thread] traceId=%X{traceId:-N/A} contractNo=%X{contractNo:-N/A} user=%X{username:-N/A} logger=%logger{40} - %msg%n%ex"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${FIXED_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/evops-base.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/evops-base.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FIXED_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 同步调用、异步入库：append 只做字段快照并投递有界队列，不阻塞业务线程 -->
+    <appender name="OPS_DB" class="com.evops.common.opslog.OpsDbAppender">
+        <filter class="com.evops.common.opslog.OpsCollectFilter"/>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="OPS_DB"/>
+    </root>
+</configuration>

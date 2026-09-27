@@ -1,0 +1,33 @@
+{
+    "success": true,
+    "message": "OK",
+    "traceId": "1a0d869f3fc7fc6d3fa5625",
+    "data": [
+        {
+            "id": 4,
+            "requestNo": "REQ-APT8-HT-0001",
+            "operator": "admin",
+            "bizTime": "2026-09-25 11:52:49",
+            "dataVersion": 1,
+            "createdAt": "2026-09-25 11:52:49",
+            "contractNo": "APT8-HT-0001",
+            "propertyCode": "APT8-P-001",
+            "tenantName": "\u674e*",
+            "tenantPhone": "138****0001",
+            "tenantIdCard": "110101********0001",
+            "emergencyContact": {
+                "name": "\u97e9*",
+                "phone": "139****0001",
+                "relation": "\u914d\u5076"
+            },
+            "leaseStart": "2026-01-01",
+            "leaseEnd": "2026-12-31",
+            "monthlyRent": 3000.0,
+            "deposit": 1000.0,
+            "remark": null,
+            "status": "ACTIVE",
+            "signArchiveId": null,
+            "updatedAt": "2026-09-25 11:52:49"
+        }
+    ]
+}

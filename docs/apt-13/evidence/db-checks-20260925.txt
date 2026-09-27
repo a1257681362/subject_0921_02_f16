@@ -1,0 +1,27 @@
+USER_ID | USERNAME     | ROLE_CODE    | STATUS
+1       | steward01    | steward      | ACTIVE
+2       | supervisor01 | supervisor   | ACTIVE
+3       | area01       | area_steward | ACTIVE
+4       | combo01      | steward      | ACTIVE
+4       | combo01      | supervisor   | ACTIVE
+5       | admin        | admin        | ACTIVE
+6       | demo01       | report_demo  | ACTIVE
+(7 rows, 105 ms)
+USERNAME     | PERM_TYPE | CNT
+combo01      | BUTTON    | 27
+combo01      | MENU      | 10
+steward01    | BUTTON    | 20
+steward01    | MENU      | 9
+supervisor01 | BUTTON    | 26
+supervisor01 | MENU      | 9
+(6 rows, 99 ms)
+ROLE_CODE    | PERM_COUNT
+admin        | 36
+area_steward | 29
+report_demo  | 3
+steward      | 29
+supervisor   | 35
+(5 rows, 11 ms)
+PERMISSION_ID
+18
+(1 row, 1 ms)

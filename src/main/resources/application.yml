@@ -1,0 +1,124 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: evops-base
+  profiles:
+    active: dev
+  jackson:
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+  datasource:
+    url: jdbc:h2:file:./data/evops;AUTO_SERVER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: false
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.evops
+  configuration:
+    map-underscore-to-camel-case: true
+
+# 仅用 URL 级鉴权，关闭 Shiro 注解代理：其 DefaultAdvisorAutoProxyCreator 会把
+# 已被事务 CGLIB 代理的 Service 再包一层 JDK 代理，导致按类型注入失败
+shiro:
+  annotations:
+    enabled: false
+
+# 脱敏规则（apt-2）：接口返回与租约导出共用，字段打 @Sensitive 即生效。
+# 下面是启动默认底；运行时以 rule-file 外部文件为覆盖层，改文件自动热加载，无需重启。
+evops:
+  # apt-3 RBAC：令牌鉴权总开关。enabled=false 为应急回退开关，
+  # 关闭后 /api/** 恢复匿名可达（仅限紧急处置，回滚步骤见 docs/apt-3-上线说明.md）。
+  rbac:
+    enabled: true
+    token-ttl-hours: 12
+  sensitive:
+    enabled: true
+    rule-file: config/sensitive-rules.yml
+    rules:
+      name:    { keep-prefix: 1, keep-suffix: 0, mask-char: "*" }
+      phone:   { keep-prefix: 3, keep-suffix: 4, mask-char: "*" }
+      id-card: { keep-prefix: 6, keep-suffix: 4, mask-char: "*" }
+  # apt-4 DFA 敏感词过滤：词典存库（t_sensitive_word）后台维护，改动即时重建引擎。
+  # enabled=false 为应急总开关（排障窗口临时关闭，平时保持 true）。
+  sensitive-word:
+    enabled: true
+    mask-char: "*"
+  # apt-5 电子签章平台对接：
+  # provider=mock（默认）进程内模拟平台，零外部依赖，演示页 /api/esign-demo/console；
+  # provider=http 接真实网关（下周对接只改下面地址与密钥，任务步骤不变）。
+  # apt-9：平台签署完成后回调 EVOPS（/api/esign/callback/sign），回调验签与出站签名
+  # 复用同一把 access-key/access-secret；callback.* 是平台入站安全规矩，默认强制开启。
+  esign:
+    provider: mock
+    base-url: http://esign-gateway.internal
+    access-key: ""
+    access-secret: ""
+    connect-timeout-ms: 3000
+    read-timeout-ms: 10000
+    mock:
+      step-delay-ms: 200      # 每步平台调用模拟耗时，演示时进度可见
+      sign-wait-ms: 1500     # 发起后模拟租客自动签署的等待（也可在演示页手动完成）
+    callback:
+      enabled: true                 # 回调验签总开关（关闭即放开平台入口，仅限紧急排障）
+      path: /api/esign/callback/sign
+      timestamp-max-age-seconds: 480   # 时间戳与服务端时钟相差超 8 分钟拒绝（过早/过晚）
+      nonce-window-minutes: 15          # 同一 nonce 15 分钟内只许出现一次
+      nonce-cleanup-interval-ms: 60000  # 过期 nonce 记录清理间隔
+  # apt-5 后台任务调度：慢操作任务表登记后由后台认领，进度每步 5%，终态记录保留 14 天。
+  task:
+    enabled: true
+    batch-size: 2                       # 本机并发执行的任务数
+    dispatch-interval-ms: 2000          # 派发扫描间隔
+    dispatch-initial-delay-ms: 500
+    sign-poll-interval-ms: 5000         # 等租客签署时的轮询间隔（任务延后重领，不空转）
+    retain-days: 14                     # 终态任务记录保留天数
+    cleanup-cron: "0 17 1 * * ?"        # 每天 01:17 清理过期记录
+  # apt-7 出租率额度预占：申请先占余量、确认实扣，取消或申请后 20 分钟未确认由后台扫描自动释放。
+  # 配额按小区维度；enabled=false 为应急开关（停超时扫描，已预占额度需人工取消释放，平时保持 true）。
+  quota:
+    enabled: true
+    hold-ttl-minutes: 20               # 预占有效期：超时未确认自动释放
+    sweep-interval-ms: 30000           # 到期预占扫描间隔（30s，最坏多占 30s，不超扣）
+    sweep-initial-delay-ms: 10000
+  # apt-6 全链路 TraceId：入口生成（或沿用入站 X-Trace-Id），响应头/响应体回带，
+  # 线程池与后台任务工作线程续传；enabled=false 为应急回退开关。
+  trace:
+    enabled: true
+    header-name: X-Trace-Id
+    inbound-min-length: 8
+    inbound-max-length: 64
+  # apt-6 运维日志归集：固定字段格式见 logback-spring.xml；文件与库内均保留 14 天。
+  # 管家在「公寓楼-运维日志」菜单按合同号/TraceId 检索；enabled=false 仅停 DB 采集，文件日志照常。
+  ops-log:
+    enabled: true
+    retain-days: 14
+    queue-capacity: 2000                # 异步入库有界队列，满即丢新并计数（不阻塞业务）
+    flush-batch-size: 200
+    flush-interval-ms: 1000
+    query-limit: 200                    # 单次检索返回上限
+    query-window-days: 14               # 检索时间窗强制 14 天
+    cleanup-cron: "0 23 1 * * ?"        # 每天 01:23 清理 14 天前采集日志
+  # apt-8 签约结果正式 Word 报告（poi-tl）：
+  # 只从新台账/新租约理数据；文件只新建不覆盖地落归档目录，按 小区/楼栋 分目录，同楼栋版本号递增登记。
+  sign-report:
+    archive-dir: archive/sign-reports  # 归档根目录（可改绝对路径）；历史报告保留不覆盖
+    template-classpath: templates/sign-result.docx
+
+logging:
+  level:
+    com.evops: INFO
+  # apt-6：日志文件按天 + 100MB 滚动，gz 归档保留 14 天（logback-spring.xml 固定字段格式）
+  file:
+    path: logs

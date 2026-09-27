@@ -1,0 +1,28 @@
+# 脱敏规则热加载文件（公寓模块 apt-2）
+#
+# 修改本文件后无需重启应用，约 1 秒内自动生效；解析失败会保留上一版规则并打印告警。
+# 删除本文件则回退到 application.yml 内置默认规则。
+#
+# 只写需要覆盖的项即可；每个类型的规则是整体覆盖（三项写全）。
+# - keep-prefix / keep-suffix：明文保留的头/尾字符数，中间用 mask-char 填充
+# - 明文长度 <= 保留位之和时整体遮蔽（如单字姓名）
+evops:
+  sensitive:
+    # 脱敏总开关：false 时接口与导出均返回明文（排障用，平时保持 true）
+    enabled: true
+    rules:
+      # 姓名留姓
+      name:
+        keep-prefix: 1
+        keep-suffix: 0
+        mask-char: "*"
+      # 手机号留前 3 后 4，如 138****0000
+      phone:
+        keep-prefix: 3
+        keep-suffix: 4
+        mask-char: "*"
+      # 证件号留前 6 后 4，如 110101********1234
+      id-card:
+        keep-prefix: 6
+        keep-suffix: 4
+        mask-char: "*"

@@ -1,0 +1,33 @@
+{
+    "success": true,
+    "message": "OK",
+    "traceId": "1a0d863ef1e1de646d2e786",
+    "data": [
+        {
+            "id": 3,
+            "requestNo": "REQ-HT-REPRO-0001",
+            "operator": "admin",
+            "bizTime": "2026-09-25 11:46:09",
+            "dataVersion": 1,
+            "createdAt": "2026-09-25 11:46:09",
+            "contractNo": "HT-REPRO-0001",
+            "propertyCode": "PROP-A-101",
+            "tenantName": "\u5f20*",
+            "tenantPhone": "138****0000",
+            "tenantIdCard": "110101********1234",
+            "emergencyContact": {
+                "name": "\u738b*",
+                "phone": "139****5678",
+                "relation": "\u914d\u5076"
+            },
+            "leaseStart": "2026-01-01",
+            "leaseEnd": "2026-12-31",
+            "monthlyRent": 3000.0,
+            "deposit": 1000.0,
+            "remark": null,
+            "status": "ACTIVE",
+            "signArchiveId": null,
+            "updatedAt": "2026-09-25 11:46:09"
+        }
+    ]
+}
